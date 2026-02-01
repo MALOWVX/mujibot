@@ -40,26 +40,75 @@ def load_user_data():
         except Exception as e:
             print(f"Error loading user data: {e}")
             user_data = {}
-    
-    # Migrate old favorites.json if exists
-    if os.path.exists("favorites.json") and str(ADMIN_ID) not in user_data:
-        try:
-            with open("favorites.json", 'r') as f:
-                old_favs = json.load(f)
-                if old_favs:
-                    user_data[str(ADMIN_ID)] = {"favorites": old_favs, "view_count": 0}
-                    save_user_data()
-                    print(f"Migrated {len(old_favs)} favorites to admin user")
-        except:
-            pass
 
 def save_user_data():
+    """Save user data to database or JSON fallback"""
     global user_data
+    
+    conn = get_db_connection()
+    if not conn:
+        # Fallback to JSON
+        try:
+            with open(DATA_FILE, 'w') as f:
+                json.dump(user_data, f, indent=2)
+        except Exception as e:
+            print(f"Error saving user data: {e}")
+        return
+    
     try:
-        with open(DATA_FILE, 'w') as f:
-            json.dump(user_data, f, indent=2)
+        cur = conn.cursor()
+        for uid, data in user_data.items():
+            cur.execute("""
+                INSERT INTO users (user_id, view_count, waifame, daily_favs, last_fav_date, favorites)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    view_count = EXCLUDED.view_count,
+                    waifame = EXCLUDED.waifame,
+                    daily_favs = EXCLUDED.daily_favs,
+                    last_fav_date = EXCLUDED.last_fav_date,
+                    favorites = EXCLUDED.favorites
+            """, (
+                uid,
+                data.get("view_count", 0),
+                data.get("waifame", 0),
+                data.get("daily_favs", 0),
+                data.get("last_fav_date", ""),
+                json.dumps(data.get("favorites", []))
+            ))
+        conn.commit()
     except Exception as e:
-        print(f"Error saving user data: {e}")
+        print(f"Database save error: {e}")
+    finally:
+        conn.close()
+
+def load_user_data():
+    """Load all user data from database"""
+    global user_data
+    
+    conn = get_db_connection()
+    if not conn:
+        load_user_data_json()
+        return
+    
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT user_id, view_count, waifame, daily_favs, last_fav_date, favorites FROM users")
+        rows = cur.fetchall()
+        
+        for row in rows:
+            user_data[row[0]] = {
+                "view_count": row[1],
+                "waifame": row[2],
+                "daily_favs": row[3],
+                "last_fav_date": row[4] or "",
+                "favorites": json.loads(row[5]) if row[5] else []
+            }
+        print(f"Loaded {len(rows)} users from database")
+    except Exception as e:
+        print(f"Database load error: {e}")
+        load_user_data_json()
+    finally:
+        conn.close()
 
 def get_user_data(user_id):
     """Get or create user data"""
@@ -1298,4 +1347,8 @@ class FavoritesView(discord.ui.View):
             await interaction.response.edit_message(embed=embed, view=self)
 
 if __name__ == "__main__":
+    # Initialize database and load data
+    init_db()
+    load_user_data()
+    print("Starting bot...")
     bot.run(TOKEN)
