@@ -1,1 +1,1 @@
-worker: python muji.py
+worker: python BOT.py
