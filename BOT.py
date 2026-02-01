@@ -356,12 +356,15 @@ async def send_main_view(ctx, post, tags, user_id):
     # Increment view count (Waifame is earned on favorites only now)
     view_count = increment_view_count(user_id, post)
     
+    # Calculate potential waifame value
+    potential_waifame = calculate_waifame(post)
+    
     # Create View
     view = ImageView(ctx.guild.id, post, tags, user_id)
     
     embed = discord.Embed(title=f"Danbooru #{post_id}", url=post_url, color=0xBB86FC)
     embed.set_image(url=file_url)
-    embed.set_footer(text=f"👁️ {view_count} vues | ❤️ Ajoute en favori pour gagner du Waifame")
+    embed.set_footer(text=f"👁️ {view_count} vues | ❤️ = +{potential_waifame} Waifame")
     
     await ctx.send(embed=embed, view=view)
 
@@ -1524,11 +1527,14 @@ class ImageView(discord.ui.View):
             
             self.post = post
             
-            # Increment view count and earn waifame
+            # Increment view count (Waifame earned on favorites only)
             if self.user_id:
-                view_count, earned, total_waifame = increment_view_count(self.user_id, post)
+                view_count = increment_view_count(self.user_id, post)
             else:
-                view_count, earned, total_waifame = 0, 0, 0
+                view_count = 0
+            
+            # Calculate potential waifame value for display
+            potential_waifame = calculate_waifame(post)
             
             # Update download button URL
             file_url = post.get('file_url')
@@ -1551,7 +1557,7 @@ class ImageView(discord.ui.View):
 
             embed = discord.Embed(title=f"Danbooru #{post_id}", url=f"https://danbooru.donmai.us/posts/{post_id}", color=0xBB86FC)
             embed.set_image(url=file_url)
-            embed.set_footer(text=f"👁️ {view_count} vues | 💰 +{earned} Waifame ({total_waifame} total)")
+            embed.set_footer(text=f"👁️ {view_count} vues | ❤️ = +{potential_waifame} Waifame")
             
             await interaction.message.edit(embed=embed, view=self)
         else:
