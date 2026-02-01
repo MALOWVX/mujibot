@@ -28,10 +28,52 @@ bot = commands.Bot(command_prefix="?", intents=intents)
 # --- Bot State ---
 history = {} 
 video_history = {}  # Separate history for videos
-user_data = {}  # {user_id: {"favorites": [...], "view_count": 0}}
+user_data = {}  # Local cache, synced with database
 
-# --- Data Management ---
-def load_user_data():
+# --- Database Setup ---
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+def get_db_connection():
+    """Get a connection to PostgreSQL database"""
+    if not DATABASE_URL:
+        return None
+    try:
+        import psycopg2
+        return psycopg2.connect(DATABASE_URL)
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        return None
+
+def init_db():
+    """Initialize database tables"""
+    conn = get_db_connection()
+    if not conn:
+        print("No DATABASE_URL found, using local JSON fallback")
+        load_user_data_json()
+        return
+    
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                user_id TEXT PRIMARY KEY,
+                view_count INTEGER DEFAULT 0,
+                waifame INTEGER DEFAULT 0,
+                daily_favs INTEGER DEFAULT 0,
+                last_fav_date TEXT DEFAULT '',
+                favorites TEXT DEFAULT '[]'
+            )
+        """)
+        conn.commit()
+        print("Database initialized successfully!")
+    except Exception as e:
+        print(f"Database init error: {e}")
+    finally:
+        conn.close()
+
+# --- Data Management (with PostgreSQL support) ---
+def load_user_data_json():
+    """Fallback: Load from JSON file"""
     global user_data
     if os.path.exists(DATA_FILE):
         try:
