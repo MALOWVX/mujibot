@@ -1,2 +1,0 @@
-# mujibot
-bot goat
