@@ -353,15 +353,15 @@ async def send_main_view(ctx, post, tags, user_id):
         history[ctx.guild.id] = []
     history[ctx.guild.id].append(post)
     
-    # Increment view count and earn waifame
-    view_count, earned, total_waifame = increment_view_count(user_id, post)
+    # Increment view count (Waifame is earned on favorites only now)
+    view_count = increment_view_count(user_id, post)
     
     # Create View
     view = ImageView(ctx.guild.id, post, tags, user_id)
     
     embed = discord.Embed(title=f"Danbooru #{post_id}", url=post_url, color=0xBB86FC)
     embed.set_image(url=file_url)
-    embed.set_footer(text=f"👁️ {view_count} vues | 💰 +{earned} Waifame ({total_waifame} total)")
+    embed.set_footer(text=f"👁️ {view_count} vues | ❤️ Ajoute en favori pour gagner du Waifame")
     
     await ctx.send(embed=embed, view=view)
 
@@ -1015,15 +1015,17 @@ async def give(ctx, target: discord.Member = None, amount: int = 0):
     await ctx.send(f"✅ **{amount}** Waifame donnés à **{target.name}** ! (Total: {data['waifame']})")
 
 @bot.command()
-async def reset(ctx, user_id: int = None):
+async def reset(ctx, target: discord.Member = None):
     """[ADMIN] Réinitialise les données d'un utilisateur"""
     if ctx.author.id != ADMIN_ID:
         await ctx.send("❌ Commande réservée à l'admin.")
         return
     
-    # Si aucun ID fourni, reset l'admin
-    if user_id is None:
+    # Si aucun utilisateur fourni, reset l'admin
+    if target is None:
         user_id = ctx.author.id
+    else:
+        user_id = target.id
     
     uid = str(user_id)
     
@@ -1041,9 +1043,10 @@ async def reset(ctx, user_id: int = None):
             "last_steal": 0
         }
         save_user_data()
-        await ctx.send(f"✅ Données de l'utilisateur **{user_id}** réinitialisées !")
+        username = target.name if target else "toi-même"
+        await ctx.send(f"✅ Données de **{username}** réinitialisées !")
     else:
-        await ctx.send(f"❌ Utilisateur **{user_id}** non trouvé dans la base de données.")
+        await ctx.send(f"❌ Utilisateur non trouvé dans la base de données.")
 
 @bot.command()
 async def logs(ctx, user_id: int = None):
