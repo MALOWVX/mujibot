@@ -278,17 +278,11 @@ def add_waifame(user_id, post):
     return earned, data["waifame"]
 
 def increment_view_count(user_id, post=None):
-    """Increment view count for a user and add waifame"""
+    """Increment view count for a user (Waifame only on favorites now)"""
     data = get_user_data(user_id)
     data["view_count"] = data.get("view_count", 0) + 1
-    
-    earned = 0
-    if post:
-        earned = calculate_waifame(post)
-        data["waifame"] = data.get("waifame", 0) + earned
-    
     save_user_data()
-    return data["view_count"], earned, data.get("waifame", 0)
+    return data["view_count"]
 
 def get_danbooru_image(tags="rating:safe"):
     """Fetch a random image from Danbooru, ensuring it has a valid embeddable URL"""
@@ -956,6 +950,100 @@ class BlackjackView(discord.ui.View):
         if hide_second:
             return f"{hand[0][0]}{hand[0][1]} | 🂠"
         return " | ".join([f"{c[0]}{c[1]}" for c in hand])
+
+@bot.command()
+async def games(ctx):
+    """🎮 Affiche la liste des mini-jeux disponibles"""
+    embed = discord.Embed(title="🎮 Mini-Jeux Disponibles", color=0x9B59B6)
+    
+    embed.add_field(
+        name="🎰 ?slots <mise>", 
+        value="Machine à sous ! 3 symboles = Jackpot (x10-x20)", 
+        inline=False
+    )
+    embed.add_field(
+        name="🃏 ?blackjack <mise>", 
+        value="Joue au Blackjack contre le bot. Blackjack = x2.5", 
+        inline=False
+    )
+    embed.add_field(
+        name="🎣 ?fish", 
+        value="Pêche un poisson ! Rareté: Commun → Légendaire (cooldown: 30 min)", 
+        inline=False
+    )
+    embed.add_field(
+        name="🎁 ?daily", 
+        value="Récompense quotidienne (50-150 💰) + bonus streak", 
+        inline=False
+    )
+    embed.add_field(
+        name="💰 ?steal @user", 
+        value="Essaie de voler quelqu'un (40% succès, cooldown: 1h)", 
+        inline=False
+    )
+    embed.add_field(
+        name="📊 ?stats", 
+        value="Affiche tes statistiques et ton Waifame", 
+        inline=False
+    )
+    embed.add_field(
+        name="🏆 ?leaderboard", 
+        value="Classement Waifame du serveur", 
+        inline=False
+    )
+    
+    embed.set_footer(text="💡 Mise minimum: 10 Waifame | Gagne du Waifame en ajoutant des images en ❤️")
+    await ctx.send(embed=embed)
+
+# ============== ADMIN COMMANDS ==============
+
+@bot.command()
+async def give(ctx, target: discord.Member = None, amount: int = 0):
+    """[ADMIN] Donne du Waifame à un utilisateur"""
+    if ctx.author.id != ADMIN_ID:
+        await ctx.send("❌ Commande réservée à l'admin.")
+        return
+    
+    if target is None or amount <= 0:
+        await ctx.send("❌ Usage: `?give @utilisateur <montant>`")
+        return
+    
+    data = get_user_data(target.id)
+    data["waifame"] = data.get("waifame", 0) + amount
+    save_user_data()
+    
+    await ctx.send(f"✅ **{amount}** Waifame donnés à **{target.name}** ! (Total: {data['waifame']})")
+
+@bot.command()
+async def reset(ctx, user_id: int = None):
+    """[ADMIN] Réinitialise les données d'un utilisateur"""
+    if ctx.author.id != ADMIN_ID:
+        await ctx.send("❌ Commande réservée à l'admin.")
+        return
+    
+    # Si aucun ID fourni, reset l'admin
+    if user_id is None:
+        user_id = ctx.author.id
+    
+    uid = str(user_id)
+    
+    if uid in user_data:
+        user_data[uid] = {
+            "favorites": [], 
+            "view_count": 0,
+            "waifame": 0,
+            "daily_favs": 0,
+            "last_fav_date": "",
+            "daily_streak": 0,
+            "last_daily": "",
+            "fish_caught": 0,
+            "last_fish": 0,
+            "last_steal": 0
+        }
+        save_user_data()
+        await ctx.send(f"✅ Données de l'utilisateur **{user_id}** réinitialisées !")
+    else:
+        await ctx.send(f"❌ Utilisateur **{user_id}** non trouvé dans la base de données.")
 
 @bot.command()
 async def logs(ctx, user_id: int = None):
