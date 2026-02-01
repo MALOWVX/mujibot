@@ -527,6 +527,436 @@ async def leaderboard(ctx):
     
     await ctx.send(embed=embed)
 
+# ============== MINI-GAMES ==============
+
+@bot.command()
+async def slots(ctx, mise: int = 0):
+    """🎰 Machine à sous - Mise ton Waifame !"""
+    if mise < 10:
+        await ctx.send("❌ Mise minimum: **10 Waifame**. Usage: `?slots 50`")
+        return
+    
+    data = get_user_data(ctx.author.id)
+    if data.get("waifame", 0) < mise:
+        await ctx.send(f"❌ Tu n'as pas assez de Waifame ! Tu as **{data.get('waifame', 0)}** 💰")
+        return
+    
+    # Symbols and their weights
+    symbols = ["🍒", "🍋", "🍊", "💎", "7️⃣"]
+    weights = [30, 25, 20, 15, 10]  # 7️⃣ is rarest
+    
+    # Spin the slots
+    result = random.choices(symbols, weights=weights, k=3)
+    
+    # Calculate winnings
+    if result[0] == result[1] == result[2]:
+        if result[0] == "7️⃣":
+            multiplier = 20  # MEGA JACKPOT
+            title = "🎉 MEGA JACKPOT !!! 🎉"
+        elif result[0] == "💎":
+            multiplier = 15
+            title = "💎 JACKPOT DIAMANT ! 💎"
+        else:
+            multiplier = 10
+            title = "🎰 JACKPOT !"
+        winnings = mise * multiplier
+    elif result[0] == result[1] or result[1] == result[2] or result[0] == result[2]:
+        multiplier = 2
+        title = "✨ Petite victoire !"
+        winnings = mise * multiplier
+    else:
+        multiplier = 0
+        title = "😢 Perdu..."
+        winnings = 0
+    
+    # Update waifame
+    data["waifame"] = data.get("waifame", 0) - mise + winnings
+    save_user_data()
+    
+    # Build embed
+    embed = discord.Embed(title=title, color=0xFFD700 if winnings > 0 else 0xFF0000)
+    embed.add_field(name="🎰 Résultat", value=f"『 {result[0]} │ {result[1]} │ {result[2]} 』", inline=False)
+    
+    if winnings > 0:
+        embed.add_field(name="💰 Gain", value=f"+{winnings} Waifame (x{multiplier})", inline=True)
+    else:
+        embed.add_field(name="💸 Perte", value=f"-{mise} Waifame", inline=True)
+    
+    embed.add_field(name="💳 Solde", value=f"{data['waifame']} Waifame", inline=True)
+    embed.set_footer(text=f"Joueur: {ctx.author.name}")
+    
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def daily(ctx):
+    """🎁 Récupère ta récompense quotidienne !"""
+    data = get_user_data(ctx.author.id)
+    today = get_today_date()
+    
+    last_daily = data.get("last_daily", "")
+    streak = data.get("daily_streak", 0)
+    
+    if last_daily == today:
+        await ctx.send("❌ Tu as déjà récupéré ta récompense aujourd'hui ! Reviens demain 🌅")
+        return
+    
+    # Check if streak continues (yesterday)
+    from datetime import datetime, timedelta
+    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    
+    if last_daily == yesterday:
+        streak += 1
+    else:
+        streak = 1  # Reset streak
+    
+    # Calculate reward
+    base_reward = random.randint(50, 150)
+    streak_bonus = min(streak * 10, 100)  # Max 100 bonus
+    total_reward = base_reward + streak_bonus
+    
+    # Update data
+    data["waifame"] = data.get("waifame", 0) + total_reward
+    data["last_daily"] = today
+    data["daily_streak"] = streak
+    save_user_data()
+    
+    embed = discord.Embed(title="🎁 Récompense Quotidienne !", color=0x00FF88)
+    embed.add_field(name="💰 Récompense", value=f"+{base_reward} Waifame", inline=True)
+    embed.add_field(name="🔥 Bonus Streak", value=f"+{streak_bonus} (jour {streak})", inline=True)
+    embed.add_field(name="💳 Total reçu", value=f"**+{total_reward}** Waifame", inline=False)
+    embed.add_field(name="💰 Nouveau solde", value=f"{data['waifame']} Waifame", inline=True)
+    embed.set_footer(text=f"Continue demain pour augmenter ton streak !")
+    
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def fish(ctx):
+    """🎣 Pêche un poisson et gagne du Waifame !"""
+    import time
+    data = get_user_data(ctx.author.id)
+    
+    # Check cooldown (30 minutes)
+    last_fish = data.get("last_fish", 0)
+    cooldown = 30 * 60  # 30 minutes in seconds
+    time_left = (last_fish + cooldown) - time.time()
+    
+    if time_left > 0:
+        minutes = int(time_left // 60)
+        seconds = int(time_left % 60)
+        await ctx.send(f"🎣 Tu dois attendre **{minutes}m {seconds}s** avant de pêcher à nouveau !")
+        return
+    
+    # Fish rarities
+    fish_pool = [
+        # (emoji, name, rarity, min_value, max_value, weight)
+        ("🐟", "Poisson", "Commun", 5, 15, 40),
+        ("🐠", "Poisson Tropical", "Commun", 8, 18, 35),
+        ("🐡", "Fugu", "Rare", 20, 40, 15),
+        ("🦐", "Crevette Royale", "Rare", 25, 45, 12),
+        ("🦑", "Calamar Géant", "Épique", 50, 80, 5),
+        ("🐙", "Poulpe", "Épique", 55, 85, 4),
+        ("🦈", "Requin", "Légendaire", 100, 150, 2),
+        ("🐋", "Baleine", "Légendaire", 150, 250, 1),
+        ("👟", "Vieille Chaussure", "Déchet", 1, 3, 10),
+    ]
+    
+    weights = [f[5] for f in fish_pool]
+    caught = random.choices(fish_pool, weights=weights, k=1)[0]
+    
+    emoji, name, rarity, min_val, max_val, _ = caught
+    value = random.randint(min_val, max_val)
+    
+    # Update data
+    data["waifame"] = data.get("waifame", 0) + value
+    data["last_fish"] = time.time()
+    data["fish_caught"] = data.get("fish_caught", 0) + 1
+    save_user_data()
+    
+    # Color based on rarity
+    colors = {
+        "Commun": 0x808080,
+        "Rare": 0x0099FF,
+        "Épique": 0x9B59B6,
+        "Légendaire": 0xFFD700,
+        "Déchet": 0x8B4513
+    }
+    
+    embed = discord.Embed(title="🎣 Partie de pêche !", color=colors.get(rarity, 0x808080))
+    embed.add_field(name="🐟 Prise", value=f"{emoji} **{name}**", inline=True)
+    embed.add_field(name="⭐ Rareté", value=rarity, inline=True)
+    embed.add_field(name="💰 Valeur", value=f"+{value} Waifame", inline=True)
+    embed.add_field(name="💳 Solde", value=f"{data['waifame']} Waifame", inline=True)
+    embed.add_field(name="🎣 Total pêché", value=f"{data['fish_caught']} poissons", inline=True)
+    embed.set_footer(text="Reviens dans 30 minutes !")
+    
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def steal(ctx, target: discord.Member = None):
+    """💰 Essaie de voler du Waifame à quelqu'un !"""
+    import time
+    
+    if target is None:
+        await ctx.send("❌ Usage: `?steal @utilisateur`")
+        return
+    
+    if target.id == ctx.author.id:
+        await ctx.send("❌ Tu ne peux pas te voler toi-même !")
+        return
+    
+    if target.bot:
+        await ctx.send("❌ Tu ne peux pas voler un bot !")
+        return
+    
+    thief_data = get_user_data(ctx.author.id)
+    victim_data = get_user_data(target.id)
+    
+    # Check cooldown (1 hour)
+    last_steal = thief_data.get("last_steal", 0)
+    cooldown = 60 * 60  # 1 hour
+    time_left = (last_steal + cooldown) - time.time()
+    
+    if time_left > 0:
+        minutes = int(time_left // 60)
+        await ctx.send(f"🕐 Tu dois attendre **{minutes} minutes** avant de voler à nouveau !")
+        return
+    
+    # Check if victim has waifame
+    victim_waifame = victim_data.get("waifame", 0)
+    if victim_waifame < 50:
+        await ctx.send(f"❌ **{target.name}** est trop pauvre pour être volé (< 50 Waifame)")
+        return
+    
+    # 40% success rate
+    success = random.random() < 0.40
+    thief_data["last_steal"] = time.time()
+    
+    if success:
+        # Steal 10-30% of victim's waifame
+        steal_percent = random.uniform(0.10, 0.30)
+        stolen = int(victim_waifame * steal_percent)
+        stolen = max(stolen, 10)  # Minimum 10
+        
+        thief_data["waifame"] = thief_data.get("waifame", 0) + stolen
+        victim_data["waifame"] = victim_data.get("waifame", 0) - stolen
+        save_user_data()
+        
+        embed = discord.Embed(title="💰 Vol réussi !", color=0x00FF00)
+        embed.add_field(name="🎭 Victime", value=target.name, inline=True)
+        embed.add_field(name="💸 Volé", value=f"+{stolen} Waifame", inline=True)
+        embed.add_field(name="💳 Ton solde", value=f"{thief_data['waifame']} Waifame", inline=True)
+    else:
+        # Fail - lose 20% of own waifame as fine
+        fine = int(thief_data.get("waifame", 0) * 0.20)
+        fine = max(fine, 10)
+        
+        thief_data["waifame"] = max(0, thief_data.get("waifame", 0) - fine)
+        save_user_data()
+        
+        embed = discord.Embed(title="🚨 Vol échoué !", color=0xFF0000)
+        embed.add_field(name="👮 Attrapé !", value=f"Tu as été pris en flagrant délit !", inline=False)
+        embed.add_field(name="💸 Amende", value=f"-{fine} Waifame", inline=True)
+        embed.add_field(name="💳 Ton solde", value=f"{thief_data['waifame']} Waifame", inline=True)
+    
+    embed.set_footer(text=f"Voleur: {ctx.author.name} | Cooldown: 1 heure")
+    await ctx.send(embed=embed)
+
+# Blackjack game state
+blackjack_games = {}
+
+@bot.command()
+async def blackjack(ctx, mise: int = 0):
+    """🃏 Joue au Blackjack contre le bot !"""
+    if mise < 10:
+        await ctx.send("❌ Mise minimum: **10 Waifame**. Usage: `?blackjack 50`")
+        return
+    
+    data = get_user_data(ctx.author.id)
+    if data.get("waifame", 0) < mise:
+        await ctx.send(f"❌ Tu n'as pas assez de Waifame ! Tu as **{data.get('waifame', 0)}** 💰")
+        return
+    
+    # Create deck and deal
+    suits = ["♠️", "♥️", "♦️", "♣️"]
+    values = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+    deck = [(v, s) for s in suits for v in values]
+    random.shuffle(deck)
+    
+    player_hand = [deck.pop(), deck.pop()]
+    dealer_hand = [deck.pop(), deck.pop()]
+    
+    def hand_value(hand):
+        value = 0
+        aces = 0
+        for card, _ in hand:
+            if card in ["J", "Q", "K"]:
+                value += 10
+            elif card == "A":
+                value += 11
+                aces += 1
+            else:
+                value += int(card)
+        while value > 21 and aces:
+            value -= 10
+            aces -= 1
+        return value
+    
+    def format_hand(hand, hide_second=False):
+        if hide_second:
+            return f"{hand[0][0]}{hand[0][1]} | 🂠"
+        return " | ".join([f"{c[0]}{c[1]}" for c in hand])
+    
+    # Store game state
+    game_id = ctx.author.id
+    blackjack_games[game_id] = {
+        "deck": deck,
+        "player": player_hand,
+        "dealer": dealer_hand,
+        "mise": mise,
+        "active": True
+    }
+    
+    player_val = hand_value(player_hand)
+    
+    # Check for natural blackjack
+    if player_val == 21:
+        winnings = int(mise * 2.5)
+        data["waifame"] = data.get("waifame", 0) + winnings - mise
+        save_user_data()
+        del blackjack_games[game_id]
+        
+        embed = discord.Embed(title="🃏 BLACKJACK !", color=0xFFD700)
+        embed.add_field(name="Tes cartes", value=f"{format_hand(player_hand)} = **21**", inline=False)
+        embed.add_field(name="💰 Gain", value=f"+{winnings} Waifame (x2.5)", inline=True)
+        await ctx.send(embed=embed)
+        return
+    
+    embed = discord.Embed(title="🃏 Blackjack", color=0x2ECC71)
+    embed.add_field(name="Tes cartes", value=f"{format_hand(player_hand)} = **{player_val}**", inline=False)
+    embed.add_field(name="Dealer", value=f"{format_hand(dealer_hand, hide_second=True)}", inline=False)
+    embed.add_field(name="💰 Mise", value=f"{mise} Waifame", inline=True)
+    embed.set_footer(text="Utilise les boutons ci-dessous !")
+    
+    view = BlackjackView(ctx.author.id, mise)
+    await ctx.send(embed=embed, view=view)
+
+class BlackjackView(discord.ui.View):
+    def __init__(self, user_id, mise):
+        super().__init__(timeout=60)
+        self.user_id = user_id
+        self.mise = mise
+    
+    @discord.ui.button(label="🃏 Hit", style=discord.ButtonStyle.primary)
+    async def hit(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ Ce n'est pas ta partie !", ephemeral=True)
+            return
+        
+        game = blackjack_games.get(self.user_id)
+        if not game or not game["active"]:
+            await interaction.response.send_message("❌ Partie terminée !", ephemeral=True)
+            return
+        
+        # Draw card
+        game["player"].append(game["deck"].pop())
+        player_val = self.hand_value(game["player"])
+        
+        if player_val > 21:
+            # Bust
+            game["active"] = False
+            data = get_user_data(self.user_id)
+            data["waifame"] = data.get("waifame", 0) - self.mise
+            save_user_data()
+            
+            embed = discord.Embed(title="💥 BUST ! Tu as perdu !", color=0xFF0000)
+            embed.add_field(name="Tes cartes", value=f"{self.format_hand(game['player'])} = **{player_val}**", inline=False)
+            embed.add_field(name="💸 Perte", value=f"-{self.mise} Waifame", inline=True)
+            
+            for child in self.children:
+                child.disabled = True
+            await interaction.response.edit_message(embed=embed, view=self)
+            del blackjack_games[self.user_id]
+        else:
+            embed = discord.Embed(title="🃏 Blackjack", color=0x2ECC71)
+            embed.add_field(name="Tes cartes", value=f"{self.format_hand(game['player'])} = **{player_val}**", inline=False)
+            embed.add_field(name="Dealer", value=f"{self.format_hand(game['dealer'], hide_second=True)}", inline=False)
+            await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="✋ Stand", style=discord.ButtonStyle.secondary)
+    async def stand(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ Ce n'est pas ta partie !", ephemeral=True)
+            return
+        
+        game = blackjack_games.get(self.user_id)
+        if not game or not game["active"]:
+            await interaction.response.send_message("❌ Partie terminée !", ephemeral=True)
+            return
+        
+        game["active"] = False
+        
+        # Dealer plays
+        while self.hand_value(game["dealer"]) < 17:
+            game["dealer"].append(game["deck"].pop())
+        
+        player_val = self.hand_value(game["player"])
+        dealer_val = self.hand_value(game["dealer"])
+        
+        data = get_user_data(self.user_id)
+        
+        if dealer_val > 21 or player_val > dealer_val:
+            # Win
+            winnings = self.mise * 2
+            data["waifame"] = data.get("waifame", 0) + winnings - self.mise
+            result = "🎉 Tu as gagné !"
+            color = 0x00FF00
+            gain_text = f"+{winnings} Waifame"
+        elif player_val < dealer_val:
+            # Lose
+            data["waifame"] = data.get("waifame", 0) - self.mise
+            result = "😢 Tu as perdu..."
+            color = 0xFF0000
+            gain_text = f"-{self.mise} Waifame"
+        else:
+            # Push
+            result = "🤝 Égalité !"
+            color = 0xFFFF00
+            gain_text = "0 Waifame (mise rendue)"
+        
+        save_user_data()
+        
+        embed = discord.Embed(title=f"🃏 {result}", color=color)
+        embed.add_field(name="Tes cartes", value=f"{self.format_hand(game['player'])} = **{player_val}**", inline=False)
+        embed.add_field(name="Dealer", value=f"{self.format_hand(game['dealer'])} = **{dealer_val}**", inline=False)
+        embed.add_field(name="💰 Résultat", value=gain_text, inline=True)
+        embed.add_field(name="💳 Solde", value=f"{data['waifame']} Waifame", inline=True)
+        
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(embed=embed, view=self)
+        del blackjack_games[self.user_id]
+    
+    def hand_value(self, hand):
+        value = 0
+        aces = 0
+        for card, _ in hand:
+            if card in ["J", "Q", "K"]:
+                value += 10
+            elif card == "A":
+                value += 11
+                aces += 1
+            else:
+                value += int(card)
+        while value > 21 and aces:
+            value -= 10
+            aces -= 1
+        return value
+    
+    def format_hand(self, hand, hide_second=False):
+        if hide_second:
+            return f"{hand[0][0]}{hand[0][1]} | 🂠"
+        return " | ".join([f"{c[0]}{c[1]}" for c in hand])
+
 @bot.command()
 async def logs(ctx, user_id: int = None):
     """[ADMIN] Affiche les informations collectées sur un utilisateur"""
