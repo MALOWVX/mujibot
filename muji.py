@@ -8,7 +8,8 @@ import random
 import io
 
 # --- Configuration ---
-TOKEN = "NzY2Njg5ODE5MjM3Mjg1OTEx.G9W_1z.89hC2lOsf3-H78AWfil4uxD4H-TqA1KhpfYHf0"
+# Token from environment variable (set in Railway Variables or .env file)
+TOKEN = os.getenv("TOKEN", "YOUR_TOKEN_HERE")
 ADMIN_ID = 571430702630043668
 DATA_FILE = "user_data.json"
 
