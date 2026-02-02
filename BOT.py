@@ -404,8 +404,9 @@ async def vnext(ctx, *, tags: str = "rating:safe"):
             video_history[ctx.guild.id] = []
         video_history[ctx.guild.id].append(post)
         
-        # Earn waifame
-        view_count, earned, total_waifame = increment_view_count(ctx.author.id, post)
+        # Track view (Waifame earned on favorites only)
+        view_count = increment_view_count(ctx.author.id, post)
+        potential_waifame = calculate_waifame(post)
         
         # Try to download and upload video as attachment
         video_msg = None
@@ -424,7 +425,7 @@ async def vnext(ctx, *, tags: str = "rating:safe"):
         # Create embed with info
         embed = discord.Embed(title=f"🎬 Vidéo #{post_id}", url=post_url, color=0x9B59B6)
         embed.add_field(name="👁️ Vues", value=str(view_count), inline=True)
-        embed.add_field(name="💰 Waifame", value=f"+{earned} ({total_waifame} total)", inline=True)
+        embed.add_field(name="❤️ Waifame", value=f"+{potential_waifame} si favori", inline=True)
         embed.set_footer(text=f"Tags: {post.get('tag_string', '')[:50]}...")
         
         # Create view and send embed with buttons
